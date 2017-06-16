@@ -11,7 +11,9 @@
 #include <ros/time.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Range.h>
+#include <Wire.h>
 #include "UltrasoundSensor.h"
+#include "SRFRangeSensor.h"
 
 /*****************************************************************
  * ROS Runtime
@@ -26,11 +28,11 @@ ros::Publisher pub_range("ultrasound/range", &range_msg);
  * Ultrasonic
  *****************************************************************/
 
-UltrasoundSensor ultrasounds[] = {UltrasoundSensor(14),
-                            UltrasoundSensor(6, 7),
-                            UltrasoundSensor(8, 9),
-                            UltrasoundSensor(10, 11),
-                            UltrasoundSensor(16)};
+RangeSensor* ultrasounds[] = {new UltrasoundSensor(14),
+                              new UltrasoundSensor(6, 7),
+                              new SRFRangeSensor(0xE4),
+                              new UltrasoundSensor(10, 11),
+                              new UltrasoundSensor(16)};
 String frames[] = {"sensor0",
                    "sensor1",
                    "sensor2",
@@ -53,11 +55,13 @@ void setup() {
     range_msg.min_range = 0.01;
     range_msg.max_range = 6.47;
 
-    ultrasounds[0].setTimeout(20000UL);
-    ultrasounds[1].setTimeout(1000UL);
-    ultrasounds[2].setTimeout(1000UL);
-    ultrasounds[3].setTimeout(1000UL);
-    ultrasounds[4].setTimeout(20000UL);
+    ultrasounds[0]->setTimeout(20000UL);
+    ultrasounds[1]->setTimeout(1000UL);
+    ultrasounds[2]->setTimeout(20000UL);
+    ultrasounds[3]->setTimeout(1000UL);
+    ultrasounds[4]->setTimeout(20000UL);
+
+    Wire.begin();
 }
 
 /*****************************************************************
@@ -75,12 +79,12 @@ void loop() {
 
     // Publish with rate-limiting
     if ( millis() >= range_time ){
-        ultrasounds[count].doRange();
-        range_msg.range = ultrasounds[count].getRange()/100.0f;
+        range_time =  millis() + 20;
+        ultrasounds[count]->doRange();
+        range_msg.range = ultrasounds[count]->getRange()/100.0f;
         range_msg.header.stamp = nh.now();
         range_msg.header.frame_id = frames[count].c_str();
         pub_range.publish(&range_msg);
-        range_time =  millis() + 20;
         count = ++count % ULTRASOUND_COUNT;
    }
 

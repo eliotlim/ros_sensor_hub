@@ -1,5 +1,5 @@
 /*
- * UltrasoundSensor.h
+ * UltrasoundSensor.cpp
  *
  * Abstraction Class for Ultrasound Range Sensors e.g. SRF05, Ping)))
  *
@@ -23,9 +23,6 @@ void UltrasoundSensor::doRange() {
             break;
         case INC:
             divisor = 71;
-            break;
-        case US:
-            divisor = 1;
             break;
         default:
             divisor = 28;

@@ -14,17 +14,22 @@
 
 #include <Arduino.h>
 
-enum RangeUnit {CM, INC, US};
+/*
+ * Values of divisors
+ */
+#define CM 28
+#define INC 71
 
 class RangeSensor {
     public:
-        void setUnit(RangeUnit unit) { this->unit = unit; }
-        RangeUnit getUnit() { return unit; }
+        void setUnit(uint8_t unit) { this->unit = unit; }
+        uint8_t getUnit() { return unit; }
         virtual void doRange() = 0;
         virtual unsigned int getRange() = 0;
+        virtual void setTimeout(unsigned long timeOut) = 0;
 
     protected:
-        RangeUnit unit;
+        uint8_t unit = CM;
 };
 
 #endif // RANGESENSOR_H
