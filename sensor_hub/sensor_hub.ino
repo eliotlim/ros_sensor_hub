@@ -23,10 +23,10 @@
 
 ros::NodeHandle nh;
 sensor_msgs::Range range_msg;
-ros::Publisher pub_range("ultrasound/range", &range_msg);
+ros::Publisher pub_range("sensor_hub/range", &range_msg);
 
 const char* ROS_PREFIX = "sensor_hub_fw";
-const char* VERSION_STRING = "0.1.0";
+const char* VERSION_STRING = "0.2.0";
 
 /*****************************************************************
  * Ultrasonic
@@ -44,10 +44,12 @@ int sensor_count = 0;
 bool attachSRF05(sensor_hub::AttachSRF05::Request &req,
                  sensor_hub::AttachSRF05::Response &res) {
     // Bounds check on range_sensors array
-    if (sensor_count >= SENSOR_MAX) return false;
+    if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
     // Setup sensors
     range_sensors[sensor_count] = new UltrasoundSensor(req.pin);
+    range_sensors[sensor_count]->setTimeout(req.timeout);
     frames[sensor_count] = req.frame;
+    res.error = 0;
     ++sensor_count;
     return true;
 }
@@ -55,10 +57,12 @@ bool attachSRF05(sensor_hub::AttachSRF05::Request &req,
 bool attachSRF10(sensor_hub::AttachSRF10::Request &req,
                  sensor_hub::AttachSRF10::Response &res) {
     // Bounds check on range_sensors array
-    if (sensor_count >= SENSOR_MAX) return false;
+    if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
     // Setup sensors
     range_sensors[sensor_count] = new SRFRangeSensor(req.addr);
+    range_sensors[sensor_count]->setTimeout(req.timeout);
     frames[sensor_count] = req.frame;
+    res.error = 0;
     ++sensor_count;
     return true;
 }
