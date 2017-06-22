@@ -26,7 +26,7 @@ sensor_msgs::Range range_msg;
 ros::Publisher pub_range("sensor_hub/range", &range_msg);
 
 const char* ROS_PREFIX = "sensor_hub_fw";
-const char* VERSION_STRING = "0.2.0";
+const char* VERSION_STRING = "0.3.0";
 
 /*****************************************************************
  * Ultrasonic
@@ -79,31 +79,22 @@ void setup() {
 
     nh.initNode();
 
-    nh.loginfo("Intializing ");
-    nh.loginfo(ROS_PREFIX);
-    nh.loginfo(" version ");
-    nh.loginfo(VERSION_STRING);
-
     for (int c = 0; c < SENSOR_MAX; c++) {
         range_sensors[c] = NULL;
         frames[c] = "";
     }
-    nh.loginfo("Intialized arrays");
 
     // Default range_msg data fields
     range_msg.radiation_type = sensor_msgs::Range::ULTRASOUND;
-    range_msg.header.frame_id = "test";
-    range_msg.field_of_view = 0.1; // fake
+    range_msg.header.frame_id = "map";
+    range_msg.field_of_view = 1.57; // fake
     range_msg.min_range = 0.01;
     range_msg.max_range = 6.47;
     nh.advertise(pub_range);
-    nh.loginfo("Setup Publisher");
 
     // Advertise Services
     nh.advertiseService(srf05Service);
-    nh.loginfo("Setup SRF05 Service");
     nh.advertiseService(srf10Service);
-    nh.loginfo("Setup SRF10 Service");
 
 }
 

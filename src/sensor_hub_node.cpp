@@ -8,11 +8,71 @@
 */
 
 #include <ros/ros.h>
+#include <sensor_msgs/Range.h>
 #include <sensor_hub/AttachSRF05.h>
 #include <sensor_hub/AttachSRF10.h>
 
 const std::string ROS_PREFIX = "sensor_hub_node";
-const std::string VERSION_STRING = "0.2.0";
+const std::string VERSION_STRING = "0.3.0";
+
+std::set<std::string> frameSet;
+std::map<std::string, int> frameBucket;
+int timer = 0;
+
+/**
+    Callback for handling ROS sensor messages
+
+    @param msg sensor_msgs::Range by reference
+    @return nothing
+*/
+
+void topicMonitor(const sensor_msgs::Range& msg) {
+    timer = (timer + 1) % 100;
+    std::string frame_id = msg.header.frame_id;
+
+    ROS_DEBUG("Received message! %d", timer);
+
+    // If frame is monitored, increment respective bucket
+    if (frameSet.find(frame_id) != frameSet.end()) {
+        // TODO: Increment bucket for real (requires check)
+        if (msg.min_range <= msg.range && msg.range <= msg.max_range) {
+            frameBucket[frame_id] = 1;
+            ROS_DEBUG("Received valid message from: %s", frame_id.c_str());
+        }
+    }
+
+    // Tell everyone who has been a BAD BOY
+    if (timer == 0) {
+        std::vector<std::string> frameMissing;
+
+        // For each monitored frame, check for missing data
+        for (std::set<std::string>::iterator it = frameSet.begin(); it != frameSet.end(); it++) {
+            if (frameBucket.find(*it) != frameBucket.end() && frameBucket[*it] >= 1) {
+                // Has received at least <threshold> packets since last run
+            } else {
+                // Has not received anything
+                frameMissing.push_back(*it);
+            }
+        }
+
+        // For each frame with missing data, log an error
+        for (std::vector<std::string>::iterator it = frameMissing.begin(); it != frameMissing.end(); it++) {
+            ROS_ERROR("Missing data from sensor frame: %s", it->c_str());
+        }
+
+        // If frameMissing is Empty
+        if (frameMissing.size() == 0) {
+            ROS_INFO("No missing frames detected.");
+        }
+        ROS_DEBUG("frameMissing: %ul", frameMissing.size());
+
+        // Empty the frameBucket
+        while (!frameBucket.empty()) {
+            frameBucket.erase(frameBucket.begin());
+        }
+    }
+
+}
 
 /**
     Entry point for ROS Node Execution
@@ -31,6 +91,7 @@ int main(int argc, char** argv) {
 
     // Read sensor list
     std::vector<std::string> sensors;
+    std::map<std::string, ros::Subscriber> subscriberMap;
     nh.getParam("sensors", sensors);
     if (sensors.size() == 0) ROS_WARN("No sensors configured");
 
@@ -40,6 +101,13 @@ int main(int argc, char** argv) {
         nh.getParam(*sensorNameIt + "/topic", sensorTopic);
         nh.getParam(*sensorNameIt + "/transform/frame", sensorFrame);
         nh.getParam(*sensorNameIt + "/device/type", deviceType);
+
+        if (subscriberMap.find(sensorTopic) == subscriberMap.end()) {
+            subscriberMap[sensorTopic] = nh.subscribe(sensorTopic, 100, topicMonitor);
+        }
+        if (subscriberMap.find(sensorTopic) != subscriberMap.end()) {
+            frameSet.insert(sensorFrame);
+        }
 
         uint8_t error = 0;
 
