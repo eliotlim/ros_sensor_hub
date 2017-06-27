@@ -14,6 +14,7 @@
 #include <Wire.h>
 #include "UltrasoundSensor.h"
 #include "SRFRangeSensor.h"
+#include <sensor_hub/SetupSensorHub.h>
 #include <sensor_hub/AttachSRF05.h>
 #include <sensor_hub/AttachSRF10.h>
 
@@ -22,20 +23,28 @@
  *****************************************************************/
 
 ros::NodeHandle nh;
-sensor_msgs::Range range_msg;
-ros::Publisher pub_range("sensor_hub/range", &range_msg);
 
 const char* ROS_PREFIX = "sensor_hub_fw";
-const char* VERSION_STRING = "0.3.0";
+const char* VERSION_STRING = "0.4.0";
+const int SENSOR_MAX = 20;
 
 /*****************************************************************
- * Ultrasonic
+ * Sensor Variables
  *****************************************************************/
 
-const int SENSOR_MAX = 5;
+int sensor_count = 0;
 RangeSensor* range_sensors[SENSOR_MAX];
 String frames[SENSOR_MAX];
-int sensor_count = 0;
+sensor_msgs::Range range_msgs[SENSOR_MAX];
+ros::Publisher range_pub("sensor_hub/range", range_msgs);
+
+/*****************************************************************
+ * State Variables
+ *****************************************************************/
+
+long range_time;
+int count = 0;
+bool published = false, scheduleReset = false;
 
 /*****************************************************************
  * Service Methods
@@ -45,10 +54,14 @@ bool attachSRF05(sensor_hub::AttachSRF05::Request &req,
                  sensor_hub::AttachSRF05::Response &res) {
     // Bounds check on range_sensors array
     if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
-    // Setup sensors
+    // Setup sensor
     range_sensors[sensor_count] = new UltrasoundSensor(req.pin);
     range_sensors[sensor_count]->setTimeout(req.timeout);
+    // Populate published fields
     frames[sensor_count] = req.frame;
+    range_msgs[sensor_count].field_of_view = 0.52;
+    range_msgs[sensor_count].min_range = 0.03;
+    range_msgs[sensor_count].max_range = 4.0;
     res.error = 0;
     ++sensor_count;
     return true;
@@ -58,10 +71,14 @@ bool attachSRF10(sensor_hub::AttachSRF10::Request &req,
                  sensor_hub::AttachSRF10::Response &res) {
     // Bounds check on range_sensors array
     if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
-    // Setup sensors
+    // Setup sensor
     range_sensors[sensor_count] = new SRFRangeSensor(req.addr);
     range_sensors[sensor_count]->setTimeout(req.timeout);
+    // Populate published fields
     frames[sensor_count] = req.frame;
+    range_msgs[sensor_count].field_of_view = 1.57;
+    range_msgs[sensor_count].min_range = 0.05;
+    range_msgs[sensor_count].max_range = 6.0;
     res.error = 0;
     ++sensor_count;
     return true;
@@ -70,46 +87,68 @@ bool attachSRF10(sensor_hub::AttachSRF10::Request &req,
 ros::ServiceServer<sensor_hub::AttachSRF05::Request, sensor_hub::AttachSRF05::Response> srf05Service("AttachSRF05", attachSRF05);
 ros::ServiceServer<sensor_hub::AttachSRF10::Request, sensor_hub::AttachSRF10::Response> srf10Service("AttachSRF10", attachSRF10);
 
- /*****************************************************************
-  * Setup
-  *****************************************************************/
+void resetHub() {
+    sensor_count = 0;
+    for (int c = 0; c < SENSOR_MAX; c++) {
+        range_sensors[c] = NULL;
+        frames[c] = "";
+        // Default range_msg data fields
+        range_msgs[c].radiation_type = sensor_msgs::Range::ULTRASOUND;
+        range_msgs[c].header.frame_id = "map";
+        range_msgs[c].field_of_view = 1.57; // fake
+        range_msgs[c].min_range = 0.01;
+        range_msgs[c].max_range = 6.47;
+    }
+}
+
+void (*softReset)(void) = NULL;
+
+bool setupSensorHub(sensor_hub::SetupSensorHub::Request &req,
+                   sensor_hub::SetupSensorHub::Response &res) {
+    // Provision for reset
+    if (req.reset) { res.error = 1; scheduleReset = true; return; }
+    // SetupSensorHub
+    resetHub();
+
+    range_time = millis() + 1000;
+
+}
+
+ros::ServiceServer<sensor_hub::SetupSensorHub::Request, sensor_hub::SetupSensorHub::Response> setupService("SetupSensorHub", setupSensorHub);
+
+/*****************************************************************
+* Setup
+*****************************************************************/
 
 void setup() {
     Wire.begin();
 
     nh.initNode();
+    resetHub();
 
-    for (int c = 0; c < SENSOR_MAX; c++) {
-        range_sensors[c] = NULL;
-        frames[c] = "";
-    }
+    // Advertise Setup Service
+    nh.advertiseService(setupService);
 
-    // Default range_msg data fields
-    range_msg.radiation_type = sensor_msgs::Range::ULTRASOUND;
-    range_msg.header.frame_id = "map";
-    range_msg.field_of_view = 1.57; // fake
-    range_msg.min_range = 0.01;
-    range_msg.max_range = 6.47;
-    nh.advertise(pub_range);
-
-    // Advertise Services
+    // Advertise Sensor Services
     nh.advertiseService(srf05Service);
     nh.advertiseService(srf10Service);
 
+    // Advertise Data Topic
+    nh.advertise(range_pub);
+
 }
-
-/*****************************************************************
- * State Variables
- *****************************************************************/
-
-long range_time;
-int count = 0;
 
 /*****************************************************************
  * Main Loop
  *****************************************************************/
 
 void loop() {
+    // Reset hook
+    if (scheduleReset) {
+        nh.spinOnce();
+        softReset();
+    }
+
     // Publish with rate-limiting
     if (sensor_count != 0 && millis() >= range_time ){
         // NULL pointer check
@@ -118,14 +157,14 @@ void loop() {
             range_time = millis() + 20;
             range_sensors[count]->doRange();
             // Populate range_msg data fields and publish
-            range_msg.range = range_sensors[count]->getRange()/100.0f;
-            range_msg.header.stamp = nh.now();
-            range_msg.header.frame_id = frames[count].c_str();
-            pub_range.publish(&range_msg);
+            range_msgs[count].range = range_sensors[count]->getRange()/100.0f;
+            range_msgs[count].header.stamp = nh.now();
+            range_msgs[count].header.frame_id = frames[count].c_str();
+            range_pub.publish(&(range_msgs[count]));
         }
         // Select the next sensor (wrapping around SENSOR_COUNT)
         count = ++count % sensor_count;
-   }
+    }
 
-   nh.spinOnce();
+    nh.spinOnce();
 }
