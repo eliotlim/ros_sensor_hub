@@ -14,11 +14,10 @@
 #include <sensor_hub/AttachSRF10.h>
 
 const std::string ROS_PREFIX = "sensor_hub_node";
-const std::string VERSION_STRING = "0.4.0";
+const std::string VERSION_STRING = "0.4.1";
 
 std::set<std::string> frameSet;
 std::map<std::string, int> frameBucket;
-int timer = 0;
 
 /**
     Callback for handling ROS sensor messages
@@ -28,50 +27,47 @@ int timer = 0;
 */
 
 void topicMonitor(const sensor_msgs::Range& msg) {
-    timer = (timer + 1) % 100;
     std::string frame_id = msg.header.frame_id;
-
-    ROS_DEBUG("Received message! %d", timer);
 
     // If frame is monitored, increment respective bucket
     if (frameSet.find(frame_id) != frameSet.end()) {
         // TODO: Increment bucket for real (requires check)
         if (msg.min_range <= msg.range && msg.range <= msg.max_range) {
             frameBucket[frame_id] = 1;
-            ROS_DEBUG("Received valid message from: %s", frame_id.c_str());
+        } else {
+            ROS_DEBUG("Received invalid message from %s", frame_id.c_str());
         }
     }
+}
 
+void topicTimer(const ros::TimerEvent& event) {
     // Tell everyone who has been a BAD BOY
-    if (timer == 0) {
-        std::vector<std::string> frameMissing;
+    std::vector<std::string> frameMissing;
 
-        // For each monitored frame, check for missing data
-        for (std::set<std::string>::iterator it = frameSet.begin(); it != frameSet.end(); it++) {
-            if (frameBucket.find(*it) != frameBucket.end() && frameBucket[*it] >= 1) {
-                // Has received at least <threshold> packets since last run
-            } else {
-                // Has not received anything
-                frameMissing.push_back(*it);
-            }
-        }
-
-        // For each frame with missing data, log an error
-        for (std::vector<std::string>::iterator it = frameMissing.begin(); it != frameMissing.end(); it++) {
-            ROS_ERROR("Missing data from sensor frame: %s", it->c_str());
-        }
-
-        // If frameMissing is Empty
-        if (frameMissing.size() == 0) {
-            ROS_INFO("No missing frames detected.");
-        }
-
-        // Empty the frameBucket
-        while (!frameBucket.empty()) {
-            frameBucket.erase(frameBucket.begin());
+    // For each monitored frame, check for missing data
+    for (std::set<std::string>::iterator it = frameSet.begin(); it != frameSet.end(); it++) {
+        if (frameBucket.find(*it) != frameBucket.end() && frameBucket[*it] >= 1) {
+            // Has received at least <threshold> packets since last run
+        } else {
+            // Has not received anything
+            frameMissing.push_back(*it);
         }
     }
 
+    // For each frame with missing data, log an error
+    for (std::vector<std::string>::iterator it = frameMissing.begin(); it != frameMissing.end(); it++) {
+        ROS_ERROR("Missing data from sensor frame: %s", it->c_str());
+    }
+
+    // If frameMissing is Empty
+    if (frameMissing.size() == 0) {
+        ROS_INFO("No missing frames detected.");
+    }
+
+    // Empty the frameBucket
+    while (!frameBucket.empty()) {
+        frameBucket.erase(frameBucket.begin());
+    }
 }
 
 /**
@@ -122,7 +118,7 @@ int main(int argc, char** argv) {
             frameSet.insert(sensorFrame);
         }
 
-        uint8_t error = 0;
+        errno = 0;
 
         if (deviceType.compare("SRF05") == 0) {
             // Retrieve the sensor parameters for SRF05
@@ -137,12 +133,12 @@ int main(int argc, char** argv) {
             attachSRF05.request.timeout = timeout;
             // Call SRF05 initialization service
             if (ros::service::call("AttachSRF05", attachSRF05)) {
-                error = attachSRF05.response.error;
+                errno = attachSRF05.response.error;
             } else {
-                error = 2;
+                errno = 38;
             }
-            if (error) {
-                ROS_ERROR("Sensor %s : Error %d - on pin %d", sensorNameIt->c_str(), error, pin);
+            if (errno) {
+                ROS_ERROR("Sensor %s : %s - on pin %d", sensorNameIt->c_str(), strerror(errno), pin);
             }
         } else if (deviceType.compare("SRF10") == 0) {
             // Retrieve the sensor parameters for SRF10
@@ -157,12 +153,12 @@ int main(int argc, char** argv) {
             attachSRF10.request.timeout = timeout;
             // Call SRF10 initialization service
             if (ros::service::call("AttachSRF10", attachSRF10)) {
-                error = attachSRF10.response.error;
+                errno = attachSRF10.response.error;
             } else {
-                error = 2;
+                errno = 38;
             }
-            if (error) {
-                ROS_ERROR("Sensor %s : Error %d - on address 0x%x", sensorNameIt->c_str(), error, address);
+            if (errno) {
+                ROS_ERROR("Sensor %s : %s - on address 0x%x", sensorNameIt->c_str(), strerror(errno), address);
             }
         } else if (deviceType.compare("") == 0) {
             // Ignore Undefined Sensor
@@ -176,6 +172,9 @@ int main(int argc, char** argv) {
     }
 
     ROS_INFO("Sensors added");
+
+    // Add topic monitor hook
+    ros::Timer timer = nh.createTimer(ros::Duration(5), topicTimer);
 
     // Process all event callbacks
     ros::spin();

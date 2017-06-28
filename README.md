@@ -11,16 +11,16 @@ The sensor_hub_node acts as a driver, initializing and configuring the sensors b
 ## Installation
 #### Firmware
 1. Open the `sensor_hub.ino` sketch in the Arduino IDE
-- Install the required dependencies:
+2. Install the required dependencies:
   - [Rosserial](https://github.com/frankjoshua/rosserial_arduino_lib)
   - [Ultrasonic](https://github.com/eliotlim/Ultrasonic) <- Modified!
-- Select the platform and amend the `SENSOR_MAX` variable
-- Upload the firmware
+3. Select the platform and amend the `SENSOR_MAX` variable
+4. Upload the firmware
 
 #### ROS Node
 1. Change directory your catkin workspace `cd ~/catkin_ws/src`
-- Clone the sensor_hub repository into your catkin workspace `git clone https://github.com/eliotlim/sensor_hub`
-- Build the package from source by performing `catkin_make`
+2. Clone the sensor_hub repository into your catkin workspace `git clone https://github.com/eliotlim/sensor_hub`
+3. Build the package from source by performing `catkin_make`
 
 #### ROS dependencies
 - rosserial_client
@@ -62,18 +62,24 @@ See the sensorConfig.yaml [guide](https://github.com/eliotlim/sensor_pointcloud/
 ---
 
 ## Usage
-#### Connecting using the rosserial node
+#### Option 1: Using roslaunch
+1. Run the `sensor_hub/sensor_hub.launch` file after loading the sensorConfig.yaml using rosparam or [sensor_pointcloud](https://github.com/eliotlim/sensor_pointcloud)
+```
+roslaunch sensor_hub sensor_hub.launch device:=/dev/ttyACM0
+```
+
+#### Option 2: Manually starting each node
 1. Connect the device and run: `rosrun rosserial_python serial_node.py <device>`
 
   For Example:
   ```
   rosrun rosserial_python serial_node.py /dev/ttyACM0
   ```
-- Run the sensor_hub_node `rosrun sensor_hub sensor_hub_node` to load the sensor configuration onto the Arduino
+2. Run the sensor_hub_node `rosrun sensor_hub sensor_hub_node` to load the sensor configuration onto the Arduino
 
-## Errors
+## Possible Errors
 #### Unable to find Service Provider
-When sensor_hub is not connected by rosserial, the service call cannot be resolved and will fail. Check the power, data cable, serial port, and any collision with other sensor_hub_node / Arduino IDE instances.
+When sensor_hub is not connected by rosserial, the service call cannot be resolved and will fail. By default, sensor_hub_node will block and wait for the `SetupSensorHub` service to become available. Check the power, data cable, serial port, and any collision with other sensor_hub_node / Arduino IDE instances.
 #### Initialization Failure
 If the sensor_hub has run out of slots (exceeding `SENSOR_MAX`), any sensor attachment service call will fail.
 #### Invalid Sensor Data

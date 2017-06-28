@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<launch>
+    <arg name="device" default="/dev/ttyACM0" />
+    <node name="sensor_hub_node" pkg="sensor_hub" type="sensor_hub_node" />
+    <node name="sensor_hub_serial_node" pkg="rosserial_python" type="serial_node.py" args="$(arg device)"/>
+</launch>

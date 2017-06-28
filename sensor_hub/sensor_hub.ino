@@ -25,7 +25,7 @@
 ros::NodeHandle nh;
 
 const char* ROS_PREFIX = "sensor_hub_fw";
-const char* VERSION_STRING = "0.4.0";
+const char* VERSION_STRING = "0.4.1";
 const int SENSOR_MAX = 20;
 
 /*****************************************************************
@@ -52,16 +52,18 @@ bool published = false, scheduleReset = false;
 
 bool attachSRF05(sensor_hub::AttachSRF05::Request &req,
                  sensor_hub::AttachSRF05::Response &res) {
-    // Bounds check on range_sensors array
-    if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
+    // Bounds check on range_sensors array - return no space left on device (28)
+    if (sensor_count >= SENSOR_MAX) { res.error = 28; return false; }
     // Setup sensor
     range_sensors[sensor_count] = new UltrasoundSensor(req.pin);
     range_sensors[sensor_count]->setTimeout(req.timeout);
     // Populate published fields
     frames[sensor_count] = req.frame;
+    range_msgs[sensor_count].radiation_type = sensor_msgs::Range::ULTRASOUND;
     range_msgs[sensor_count].field_of_view = 0.52;
     range_msgs[sensor_count].min_range = 0.03;
     range_msgs[sensor_count].max_range = 4.0;
+    // No errors encountered
     res.error = 0;
     ++sensor_count;
     return true;
@@ -69,16 +71,18 @@ bool attachSRF05(sensor_hub::AttachSRF05::Request &req,
 
 bool attachSRF10(sensor_hub::AttachSRF10::Request &req,
                  sensor_hub::AttachSRF10::Response &res) {
-    // Bounds check on range_sensors array
-    if (sensor_count >= SENSOR_MAX) { res.error = 1; return false; }
+    // Bounds check on range_sensors array - return no space left on device (28)
+    if (sensor_count >= SENSOR_MAX) { res.error = 28; return false; }
     // Setup sensor
     range_sensors[sensor_count] = new SRFRangeSensor(req.addr);
     range_sensors[sensor_count]->setTimeout(req.timeout);
     // Populate published fields
     frames[sensor_count] = req.frame;
+    range_msgs[sensor_count].radiation_type = sensor_msgs::Range::ULTRASOUND;
     range_msgs[sensor_count].field_of_view = 1.57;
     range_msgs[sensor_count].min_range = 0.05;
     range_msgs[sensor_count].max_range = 6.0;
+    // No errors encountered
     res.error = 0;
     ++sensor_count;
     return true;
@@ -88,6 +92,7 @@ ros::ServiceServer<sensor_hub::AttachSRF05::Request, sensor_hub::AttachSRF05::Re
 ros::ServiceServer<sensor_hub::AttachSRF10::Request, sensor_hub::AttachSRF10::Response> srf10Service("AttachSRF10", attachSRF10);
 
 void resetHub() {
+    // Reset and reinitialize global variables
     sensor_count = 0;
     for (int c = 0; c < SENSOR_MAX; c++) {
         range_sensors[c] = NULL;
@@ -95,9 +100,9 @@ void resetHub() {
         // Default range_msg data fields
         range_msgs[c].radiation_type = sensor_msgs::Range::ULTRASOUND;
         range_msgs[c].header.frame_id = "map";
-        range_msgs[c].field_of_view = 1.57; // fake
-        range_msgs[c].min_range = 0.01;
-        range_msgs[c].max_range = 6.47;
+        range_msgs[c].field_of_view = 1.57;
+        range_msgs[c].min_range = 0.1;
+        range_msgs[c].max_range = 5.0;
     }
 }
 
@@ -109,7 +114,7 @@ bool setupSensorHub(sensor_hub::SetupSensorHub::Request &req,
     if (req.reset) { res.error = 1; scheduleReset = true; return; }
     // SetupSensorHub
     resetHub();
-
+    // Disable ranging for one second
     range_time = millis() + 1000;
 
 }
@@ -121,6 +126,7 @@ ros::ServiceServer<sensor_hub::SetupSensorHub::Request, sensor_hub::SetupSensorH
 *****************************************************************/
 
 void setup() {
+    // Required for SRF08/10 Support
     Wire.begin();
 
     nh.initNode();
