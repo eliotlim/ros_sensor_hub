@@ -25,7 +25,7 @@
 ros::NodeHandle nh;
 
 const char* ROS_PREFIX = "sensor_hub_fw";
-const char* VERSION_STRING = "0.4.1";
+const char* VERSION_STRING = "0.4.2";
 const int SENSOR_MAX = 20;
 
 /*****************************************************************

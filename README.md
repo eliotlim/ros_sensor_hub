@@ -63,7 +63,7 @@ See the sensorConfig.yaml [guide](https://github.com/eliotlim/sensor_pointcloud/
 
 ## Usage
 #### Option 1: Using roslaunch
-1. Run the `sensor_hub/sensor_hub.launch` file after loading the sensorConfig.yaml using rosparam or [sensor_pointcloud](https://github.com/eliotlim/sensor_pointcloud)
+1. Run the `sensor_hub/sensor_hub.launch` file after loading the sensorConfig.yaml into node namespace using rosparam or [sensor_pointcloud](https://github.com/eliotlim/sensor_pointcloud)
 ```
 roslaunch sensor_hub sensor_hub.launch device:=/dev/ttyACM0
 ```
